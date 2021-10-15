@@ -1,0 +1,252 @@
+---
+title: "COMP4441_final project"
+author: "Abigail Ward, Simran Kota"
+date: "8/2/2021"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(ggplot2)
+required_packages <- c('MASS', 'rcompanion', 'lsr', 'vcd', 'DescTools')
+for (p in required_packages) {
+  if(!require(p,character.only = TRUE)) {
+    install.packages(p, dep = TRUE)
+  }
+}
+library("graphics")
+library("gplots")
+```
+
+Initial exploration of the data
+
+```{r}
+dat<-read.csv("fatal-police-shootings-data.csv")
+dat$date <- as.Date(dat$date)
+```
+
+The initial data set has ``nrow(dat)`` observations of ``ncol(dat)`` features. However, there are a number of null values present in the data.
+
+``` {r}
+dat <- dat %>% na_if("") %>% na.omit
+```
+
+After removing the nulls and empty strings, we have ``nrow(dat)`` observations of ``ncol(dat)`` features.
+
+### Exploratory Data Analysis
+
+``` {r}
+countState <- table(dat$state)
+barplot(countState, main="State Distribution",
+        xlab="Number of police shootings")
+countDate <- table(dat$date)
+barplot(countDate, main="Date Distribution",
+        xlab="Number of police shootings")
+countAge <- table(dat$age)
+barplot(countAge, main="Age Distribution",
+        xlab="Number of police shootings")
+countArmed <- table(dat$armed)
+barplot(countArmed, main="Armed Distribution",
+        xlab="Number of police shootings")
+gun<-("gun")
+unarmed<-("unarmed")
+dat$group <- with(dat, ifelse(armed %in% gun, "gun",
+                            ifelse(armed %in% unarmed, "unarmed", 
+                                   ifelse(armed %in% ("undetermined"), 
+                                          "undetermined", "other" ))))
+countArmed.grouped <- table(dat$group)
+barplot(countArmed.grouped, main="Armed Distribution (Modified)",
+        xlab="Number of police shootings")
+countRace <- table(dat$race)
+barplot(countRace, main="Race Distribution",
+        xlab="Number of police shootings")
+```
+#### Findings:
+- The age variable appears to be approximately Normally distributed, but skewed to the left.
+- There are too many individual values in the armed variable to conduct a meaningful analysis. To make the values more meaningful, we constructed four categories to sort the values into: gun, other, unarmed, and undetermined.
+- It appears that there are significantly more Caucasian people represented in the data than any other race.
+
+
+The one letter abbreviations for race are as follows:
+A Asian
+B Black or African American
+H Hispanic
+N American Native or Alaskan Native 
+O Unknown/Other
+W White
+``` {r}
+ggplot(dat, aes(x=date, color=race)) + geom_freqpoly(binwidth=50) + 
+  labs(title="Shootings Over Time by Race")
+```
+There does not appear to be any specific trend over time in the number of people who are fatally shot.
+
+## Statistical Model
+
+We will investigate whether number of people that are fatally shot for a given attribute in our data is consistent with a population in which each person, regardless of said attribute, is equally likely to be fatally shot. To do this, we will create 1000 samples of the general population in the US based on 2019 Census data regarding on racial proportions from https://www.census.gov/quickfacts/fact/table/US/PST045219.  The probability of getting fatally shot regardless of race is 1/315.
+
+The racial proportions are:
+A Asian 5.9%
+B Black or African American 13.4%
+H Hispanic 18.5%
+N American Native or Alaskan Native 1.3%
+O Unknown/Other/Two or more races 2.8%
+W White 60.1%
+``` {r}
+gen_samp <- function() {
+  gen_pop <- data.frame(id=1:5000, race=sample(unique(dat$race)[0:5],500000, replace=TRUE, prob = c(0.059, 0.601, 0.185, 0.134, 0.028)))
+  gen_pop$shot <- sample(c(0, 1), 5000, replace=TRUE, prob = c(314/315, 1/315))
+  gen_pop <- gen_pop[gen_pop$shot == 1,]
+  gen_pop <- gen_pop %>% count(race)
+  return (gen_pop$n)
+}
+mat <- matrix(rep(NA, 5000), ncol=5)
+for (i in 1:1000) {
+  mat[i,] = gen_samp()
+}
+mat <- data.frame(mat)
+colnames(mat) <- gen_pop$race
+ggqqplot(mat$B)
+hist(mat$B)
+mat$total <- apply(mat, 1, sum)
+```
+The data appears to be normally distributed, indicating that we may use a Student's T-test. We will test the hypothesis that the proportion of fatal shootings for a given race, on average, is equal to the observed proportion of fatal shootings under the assumption that all races are equally likely to be a victim of a fatal shooting.
+``` {r}
+obs.val <- dat %>% count(race)
+race <- 'B'
+mean <- obs.val[obs.val$race == race,2]
+t.test(mat$B / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the African American population. The mean of our simulated populations was approximately 13%, while the observed mean was 26.7%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of African-Americans that are fatally shot is significantly higher than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'W'
+mean <- obs.val[obs.val$race == race,2]
+t.test(mat$W / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Caucasian population. The mean of our simulated populations was approximately 59.7%, while the observed mean was 50.8%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of Caucasians that are fatally shot is lower than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'A'
+mean <- obs.val[obs.val$race == race,2]
+t.test(mat$A / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Asian population. The mean of our simulated populations was approximately 5.7%, while the observed mean was 1.8%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of Asians that are fatally shot is lower than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'H'
+mean <- obs.val[obs.val$race == race,2]
+t.test(mat$H / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Hispanic population. The mean of our simulated populations was approximately 18.4%, while the observed mean was also 18.4%. The 95% confidence interval does include the observed mean, and we get a p-value of 0.7749, which is not strong evidence to reject the null hypothesis. This shows us that the percentage of Hispanics that are fatally shot is consistent with the case where all races are equally likely to be fatally shot.
+
+After analyzing all the observed values for all races against the case where all races are equally likely to be fatally shot, we see that the only race with a statistically significantly higher rate of shootings than the simulated case is African Americans.
+
+## Tests of Independence
+
+Chi squared analysis or the fisher test will be implemented to assess if there is a significant association between two characteristics of people fatally shot by the police. The null hypothesis for all assessments is that the two characteristics are independent. 
+Gender and mental illness chi squared testing:
+``` {r}
+gender_mental <- table(dat$gender, dat$signs_of_mental_illness)
+gender_mental
+balloonplot(t(gender_mental), main ="gender and race", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+chisq.test(dat$gender, dat$signs_of_mental_illness)
+```
+Gender and race Fisher test:
+``` {r}
+gender_race<-table( dat$race,dat$gender)
+gender_race
+balloonplot(t(gender_race), main ="gender and race", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(gender_race, simulate.p.value=TRUE)
+```
+
+
+
+Gender and age chi squared test:
+``` {r}
+under_18<-(0:17)
+a18_29<-(18:29)
+a30_44<-(30:44)
+a45_59<-(45:59)
+a60_100<-(60:100)
+dat$ageGroup <- with(dat, ifelse(age %in% under_18, "under 18",
+                            ifelse(age %in% a18_29, "18-29", 
+                             ifelse(age %in% a30_44, "30-44",
+                              ifelse(age %in% a45_59, "45-59",
+                                  "60 and older" )))))
+                                          
+gender_age<-table( dat$ageGroup,dat$gender)
+gender_age
+balloonplot(t(gender_age), main ="gender and age", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(gender_age, simulate.p.value=TRUE)
+```
+
+
+race and mental illness chi squared test:
+``` {r}
+                                          
+race_mental<-table( dat$race,dat$signs_of_mental_illness)
+race_mental
+balloonplot(t(race_mental), main ="race and signs of mental illness", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(race_mental, simulate.p.value=TRUE)
+```
+## Two-Sample Tests
+
+We will now attempt to examine whether there is a significant difference between the observed number of shootings for various values of the features.
+
+Here we construct a data frame based on the original data that shows the total number of shootings per year by race.
+```{r}
+by_year <- data.frame(year=2015:2021)
+by_year$A <- (dat[dat$race == "A",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+by_year$B <- (dat[dat$race == "B",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+by_year$W <- (dat[dat$race == "W",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+by_year$H <- (dat[dat$race == "H",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+O <- (dat[dat$race == "O",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+O[7] <- 0
+by_year$O <- O
+by_year$N <- (dat[dat$race == "N",] %>% mutate(year=format(date, "%Y")) %>% group_by(year) %>% count())$n
+by_year$total <- apply(by_year[,2:7], 1, sum)
+by_year
+```
+
+We will reformat the data frame wherein each row will represent a unique year-race combination. Examining the trend over time by race, we see no significant differences between the trends.
+``` {r}
+by_long <- by_year %>% 
+  gather(race, total, -year)
+ggplot(data=by_long, aes(x=year, y=total, color=race)) + geom_line()
+```
+
+We will now verify that the data for each race is normally distributed in order to conduct a two-sample T-test between various races.
+``` {r}
+for (i in 2:7) {
+  print(ggqqplot(by_year[,i]))
+}
+```
+
+Since the data is normally distributed, we may proceed.
+``` {r}
+t.test(by_year$W - by_year$B)
+t.test(by_year$total - by_year$W)
+t.test(by_year$B - by_year$H)
+```
+The t-tests indicate that the data for each race cannot be considered to be iid samples, and that there is a significant difference between the distributions of each race.
+
+``` {r}
+illness <- dat %>% mutate(year=format(date, "%Y")) %>% group_by(year, signs_of_mental_illness) %>% count()
+t.test(data=illness, n ~ signs_of_mental_illness)
+```
+
+In a two sample t-test where we look at the differences between the group with Mental Illness and the group without, we also see a statistically significant difference. However, it is worth noting that the mean of the group with Mental Illness is far lower than the mean of the group without, indicating that signs of mental illness do not necessarily make a person more likely to be fatally shot.

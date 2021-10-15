@@ -1,0 +1,405 @@
+---
+title: "COMP4441_final project"
+author: "Abigail Ward, Simran Kota"
+date: "8/2/2021"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(ggplot2)
+required_packages <- c('MASS', 'rcompanion', 'lsr', 'vcd', 'DescTools')
+for (p in required_packages) {
+  if(!require(p,character.only = TRUE)) {
+    install.packages(p, dep = TRUE)
+  }
+}
+library("graphics")
+library("gplots")
+require(foreign)
+require(nnet)
+require(reshape2)
+library(caret)
+library(plyr)
+library(Rfast2)
+library(dplyr)
+```
+
+This data comes from The Washington Post (https://bit.io/bitdotio/police_shooting/). The records were collected via local news reports, law enforcement websites, social media, and independent databases such as Killed by Police and Fatal Encounters. This list is continually updated with additional records and new information of prrevious cases. The FBI and the Centers for Disease Control and Prevention also logged fatal shootings by police, but had an incomplete list. 
+Each record represents a civilian in the United stated who was shot and killed by a police officer in the line of duty from 2015 to 2021. Not included in this data set are deaths of people in police custody, fatal shootings by off-duty officers, and non-shooting deaths. The records include details about each individual such as race, gender, age, location, signs of mental illness, etc. 
+
+
+Initial exploration of the data:
+
+```{r}
+dat<-read.csv("fatal-police-shootings-data.csv")
+dat$date <- as.Date(dat$date)
+```
+
+The initial data set has ``r nrow(dat)`` observations of ``r ncol(dat)`` features. However, there are a number of null values present in the data.
+
+``` {r}
+dat <- dat %>% na_if("") %>% na.omit
+dat <- dat[dat$date < as.Date('2021-01-01'),]
+```
+
+After removing the nulls and empty strings, we have ``r nrow(dat)`` observations of ``r ncol(dat)`` features. We also drop the data for 2021 because it is incomplete and skews our results.
+
+### Exploratory Data Analysis
+
+``` {r}
+countState <- table(dat$state)
+barplot(countState, main="State Distribution",
+        xlab="Number of police shootings")
+countDate <- table(dat$date)
+barplot(countDate, main="Date Distribution",
+        xlab="Number of police shootings")
+countAge <- table(dat$age)
+barplot(countAge, main="Age Distribution",
+        xlab="Number of police shootings")
+countArmed <- table(dat$armed)
+barplot(countArmed, main="Armed Distribution",
+        xlab="Number of police shootings")
+gun<-("gun")
+unarmed<-("unarmed")
+dat$group <- with(dat, ifelse(armed %in% gun, "gun",
+                            ifelse(armed %in% unarmed, "unarmed", 
+                                   ifelse(armed %in% ("undetermined"), 
+                                          "undetermined", "other" ))))
+countArmed.grouped <- table(dat$group)
+barplot(countArmed.grouped, main="Armed Distribution (Modified)",
+        xlab="Number of police shootings")
+countRace <- table(dat$race)
+barplot(countRace, main="Race Distribution",
+        xlab="Number of police shootings")
+```
+
+## Findings
+
+- The age variable appears to be approximately Normally distributed, but skewed to the left.
+- There are too many individual values in the armed variable to conduct a meaningful analysis. To make the values more meaningful, we constructed four categories to sort the values into: gun, other, unarmed, and undetermined.
+- It appears that there are significantly more Caucasian people represented in the data than any other race.
+
+## Goal
+The goal of this analysis is to assess the significance various factors such as age, race, mental illness and gender have on the population of civilians in the United States who have been fatally shot by the police. 
+
+## Time Series 
+
+The one letter abbreviations for race are as follows:
+
+A Asian,
+
+B Black or African American,
+
+H Hispanic,
+
+N American Native or Alaskan Native, 
+
+O Unknown/Other/Two ore more, 
+
+W White
+``` {r}
+ggplot(dat, aes(x=date, color=race)) + geom_freqpoly(binwidth=50) + 
+  labs(title="Shootings Over Time by Race")
+```
+
+There does not appear to be any specific trend over time in the number of people who are fatally shot.
+
+## Two-Sample Tests
+
+We will now attempt to examine whether there is a significant difference between the observed number of shootings for various values of the features.
+
+Here we construct a data frame based on the original data that shows the total number of shootings per year by race.
+```{r}
+by_year <- data.frame(year=2015:2020)
+by_year$A <- (dat[dat$race == "A",] %>% mutate(year=format(date, "%Y")) %>% 
+                group_by(year) %>% tally())$n
+by_year$B <- (dat[dat$race == "B",] %>% mutate(year=format(date, "%Y")) %>% 
+                group_by(year) %>% tally())$n
+by_year$W <- (dat[dat$race == "W",] %>% mutate(year=format(date, "%Y")) %>% 
+                group_by(year) %>% tally())$n
+by_year$H <- (dat[dat$race == "H",] %>% mutate(year=format(date, "%Y")) %>% 
+                group_by(year) %>% tally())$n
+by_year$N <- (dat[dat$race == "N",] %>% mutate(year=format(date, "%Y")) %>% 
+                group_by(year) %>% tally())$n
+by_year$total <- apply(by_year[,2:6], 1, sum)
+by_year
+```
+
+We will reformat the data frame wherein each row will represent a unique year-race combination. Examining the trend over time by race, we see no significant differences between the trends.
+``` {r}
+by_long <- by_year %>% 
+  gather(race, total, -year)
+ggplot(data=by_long, aes(x=year, y=total, color=race)) + geom_line()
+```
+
+We will now verify that the data for each race is normally distributed in order to conduct a two-sample T-test between various races.
+``` {r}
+for (i in 2:6) {
+  print(ggqqplot(by_year[,i], title=paste('Distribution of ', colnames(by_year)[i])))
+}
+```
+
+Since the data is normally distributed, we may proceed.
+``` {r}
+t.test(by_year$W - by_year$B)
+t.test(by_year$total - by_year$W)
+t.test(by_year$B - by_year$H)
+```
+The t-tests indicate that the data for each race cannot be considered to be iid samples, and that there is a significant difference between the distributions of each race.
+
+``` {r}
+illness <- dat %>% mutate(year=format(date, "%Y")) %>% 
+  group_by(year, signs_of_mental_illness) %>% tally()
+t.test(data=illness, n ~ signs_of_mental_illness)
+```
+
+In a two sample t-test where we look at the differences between the group with Mental Illness and the group without, we also see a statistically significant difference. However, ``r round(sum(illness[illness$signs_of_mental_illness == "True", 3])/sum(illness$n) * 100, 2)``% of the data population had signs of mental illness, while only ~20.6% of adults in the US experienced mental illness in 2019 (according to the [National Alliance on Mental Illness](https://www.nami.org/mhstats#:~:text=20.6%25%20of%20U.S.%20adults%20experienced,represents%201%20in%2020%20adults)). We can conduct a t-test to examine whether this difference is statistically significant.
+
+``` {r}
+props <- data.frame(year=2015:2020, 
+                    n=illness[illness$signs_of_mental_illness == "True", 3])
+illness$year <- as.integer(illness$year)
+tot.pop <- aggregate(x = illness$n, by=list(illness$year), FUN=sum)
+colnames(tot.pop) <- c("year", "n")
+tot.pop$prop <- props$n / tot.pop$n
+tot.pop
+
+t.test(tot.pop$prop, mu=0.206)
+```
+
+By conducting a one sample t-test between the observed proportions of mental illness in the data and the actual proportion of mental illness in US adults, we see that the difference is statistically significant. We have strong evidence to reject the null hypothesis, showing that although there are more people who are fatally shot that don't have signs of mental illness, there is a higher chance of someone being fatally shot if they do show signs of mental illness.
+
+
+## Statistical Model
+
+We will investigate whether the number of people that are fatally shot for a given race in our data is consistent with a population in which each person, regardless of race, is equally likely to be fatally shot. To do this, we will create 1000 samples of a population of 500000 people in the US based on [2019 Census data](https://www.census.gov/quickfacts/fact/table/US/PST045219) regarding racial proportions.  The probability of getting fatally shot regardless of race is 1/315, according to [Business Insider](https://www.businessinsider.com/us-gun-death-murder-risk-statistics-2018-3).
+
+The racial proportions are:
+A Asian 5.9%, 
+B Black or African American 13.4%, 
+H Hispanic 18.5%, 
+N American Native or Alaskan Native 1.3%, 
+O Unknown/Other/Two or more races 2.8%, 
+W White 60.1%
+``` {r cache=TRUE}
+set.seed(1234)
+gen_samp <- function() {
+  gen_pop <- data.frame(id=1:5000, race=sample(unique(dat$race)[1:6],500000, 
+                                               replace=TRUE,
+                                               prob = c(0.059, 0.601, 0.185, 
+                                                        0.134, 0.028, 0.013)))
+  gen_pop$shot <- sample(c(0, 1), 500000, replace=TRUE, 
+                         prob = c(314/315, 1/315))
+  gen_pop <- gen_pop[gen_pop$shot == 1,]
+  gen_pop <- gen_pop %>% group_by(race) %>% tally()
+  return (gen_pop$n)
+}
+mat <- matrix(rep(NA, 6000), ncol=6)
+for (i in 1:1000) {
+  mat[i,] = gen_samp()
+}
+mat <- data.frame(mat)
+colnames(mat) <- c("A", "B", "H", "N",  "O", "W")
+ggqqplot(mat$B, title='race=B')
+hist(mat$B, main='race=B')
+ggqqplot(mat$A, title='race=A')
+hist(mat$A, main='race=A')
+ggqqplot(mat$H, title='race=H')
+hist(mat$H, main='race=H')
+ggqqplot(mat$O, title='race=O')
+hist(mat$O, main='race=O')
+ggqqplot(mat$W, title='race=W')
+hist(mat$W, main='race=W')
+ggqqplot(mat$N, title='race=N')
+hist(mat$N, main='race=N')
+mat$total <- apply(mat, 1, sum)
+```
+The data appears to be normally distributed, indicating that we may use a Student's T-test. We will test the hypothesis that the proportion of fatal shootings for a given race, on average, is equal to the observed proportion of fatal shootings under the assumption that all races are equally likely to be a victim of a fatal shooting.
+``` {r}
+obs.val <- dat %>% group_by(race) %>% tally()
+race <- 'B'
+mean <- as.integer(obs.val[obs.val$race == race,2])
+t.test(mat$B / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the African American population. The mean of our simulated populations was approximately 13%, while the observed mean was 26%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of African-Americans that are fatally shot is significantly higher than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'W'
+mean <- as.integer(obs.val[obs.val$race == race,2])
+t.test(mat$W / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Caucasian population. The mean of our simulated populations was approximately 59%, while the observed mean was 50%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of Caucasians that are fatally shot is lower than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'A'
+mean <- as.integer(obs.val[obs.val$race == race,2])
+t.test(mat$A / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Asian population. The mean of our simulated populations was approximately 5%, while the observed mean was 1.8%. The 95% confidence interval does not include the observed mean, and we get a p-value of 2.2e-16, providing strong evidence to reject the null hypothesis. This also shows us that the percentage of Asians that are fatally shot is lower than it would be in the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'H'
+mean <- as.integer(obs.val[obs.val$race == race,2])
+t.test(mat$H / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Hispanic population. The mean of our simulated populations was approximately 18%, while the observed mean was 18.4%. Although we get a p-value of 2.2e-16 which is strong evidence to reject the null hypothesis, the observed mean is very close to the simulated mean, and just outside the confidence interval. This shows us that the percentage of Hispanics that are fatally shot is almost consistent with the case where all races are equally likely to be fatally shot.
+
+``` {r}
+race <- 'N'
+mean <- as.integer(obs.val[obs.val$race == race,2])
+t.test(mat$N / mat$total, mu=mean / sum(obs.val$n))
+```
+
+Here we conducted the T-test for the Native-American population. The mean of our simulated populations was approximately 1%, while the observed mean was 1.5%. Although we get a p-value of 2.2e-16 which is strong evidence to reject the null hypothesis, the observed mean is very close to the simulated mean, and just outside the confidence interval. This shows us that the percentage of Native Americans that are fatally shot is almost consistent with the case where all races are equally likely to be fatally shot.
+
+After analyzing all the observed values for all races against the case where all races are equally likely to be fatally shot, we see that the only race with a statistically significantly higher rate of shootings than the simulated case is African Americans.
+
+## Tests of Independence
+
+Chi squared analysis or the fisher test will be implemented to assess if there is a significant association between two characteristics of people fatally shot by the police. The null hypothesis for all assessments is that the two characteristics are independent. In places where the chi squared test was not appropriate because the category values were less than 5 or close to 5, the fisher test was implemented. This was an appropriately sized data set to use the fisher test as the data set size was not too large as to cause extensive computation times. 
+
+
+Gender and Mental Illness:
+Here we assessed the independence of the gender and signs of mental illness of people who were fatally shot by the police using the chi squared test. As shown in the plot, the largest proportion of the sample set is male and with no mental illness, and the smallest proportion is females with signs of mental illness. With $\chi^2 = 13.641$, $df = 1$, $p-value = 0.0002213$, we reject the null hypothesis that gender and signs of mental illness are independent. There is a significant relationship between the gender and the signs of mental illness in people who were fatally shot by the police. 
+``` {r}
+gender_mental <- table(dat$gender, dat$signs_of_mental_illness)
+gender_mental
+balloonplot(t(gender_mental), main ="gender and mental illness", xlab ="", 
+            ylab="", label = FALSE, show.margins = FALSE)
+chisq.test(dat$gender, dat$signs_of_mental_illness)
+```
+
+
+
+Gender and Race:
+This fisher tests was used to assess the independence of gender and race of people who were fatally shot by the police. With a $p-value = 0.0009995$, we reject the null hypothesis that gender and race are independent. There is a relationship between race and gender resulting in a higher proportion of males being shot and within that, there is a high proportion of those males being white followed by being black and then Hispanic. 
+
+``` {r}
+gender_race<-table( dat$race,dat$gender)
+gender_race
+balloonplot(t(gender_race), main ="gender and race", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(gender_race, simulate.p.value=TRUE)
+```
+
+
+
+Gender and age:
+We used a chi squared test to assess the relationship between gender and age in our data set. The age ranges were created to reduce the possible choices for age and were set based on the age commonly considered for minors, young adults, middle age, adulthood, and older adults. Note that the "under 18" category appears at the bottom of the table. We can see that there is a higher presence of males than females and we have also seen in the previous tests. We also see that there is are significantly less people that fall into the "under 18" category and the "60 and older category. This indicated that there is a relationship between the age and gender, however the fisher test resulted in a p-value = 0.05697. We fail to reject the null hypothesis and cannot conclude that there is a significant relationship between gender and the age categories we have selected. 
+``` {r}
+under_18<-(0:17)
+a18_29<-(18:29)
+a30_44<-(30:44)
+a45_59<-(45:59)
+a60_100<-(60:100)
+dat$ageGroup <- with(dat, ifelse(age %in% under_18, "under 18",
+                            ifelse(age %in% a18_29, "18-29", 
+                             ifelse(age %in% a30_44, "30-44",
+                              ifelse(age %in% a45_59, "45-59",
+                                  "60 and older" )))))
+                                          
+gender_age<-table( dat$ageGroup,dat$gender)
+gender_age
+balloonplot(t(gender_age), main ="gender and age", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(gender_age, simulate.p.value=TRUE)
+```
+
+
+Race and Mental Illness:
+As shown previously, race and gender have a statistically significant relationship, we also wanted to see if there is a relationship between race and signs of mental illness. The fisher test was implemented and resulted in a p-value = 0.0004998. We reject the null hypothesis that the two factors are independent. 
+
+``` {r}
+race_mental<-table( dat$race,dat$signs_of_mental_illness)
+race_mental
+balloonplot(t(race_mental), main ="race and signs of mental illness", xlab ="", 
+            ylab="", label = FALSE, show.margins = FALSE)
+fisher.test(race_mental, simulate.p.value=TRUE)
+```
+Race and Age:
+Using the fisher test to assess the significance of the relationship between race and age, we found a p-value of 0.0004998 meaning the two factors are not independent. This indicates that the age a civilian in shot fatally by the police is dependent on their race. 
+
+
+``` {r}
+race_age<-table( dat$race,dat$ageGroup)
+race_age
+balloonplot(t(race_age), main ="race and age", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE)
+fisher.test(race_age, simulate.p.value=TRUE)
+```
+
+
+##Logistic regression
+We used multinomial logistic regression to predict the race based on 4 variables. The predicted variable race is both categorical and with more than two possible outcomes. The independent variables are gender (M/F), signs_of_mental_illness (True/False),body_camera (True/False), and side of the United States (West/East) all of which are dichotomous.
+
+ We set the reference level to race="W" and trained the model with 70% of the original data set. The accuracy of this model is 52.1% which the number of classifications a model correctly predicts divided by the total number of predictions made. The final negative log-likelihood is 5394.922383 which is fairly high indicating the model is performing badly. The model performance indicates that there are likely additional or different factors in a situation which better predict the race of the person shot and killed by the police. 
+
+
+``` {r}
+west<-c('WA','OR','CA', 'MT', 'ID', 'WY', 'NV', 'UT', 'CO', 'AZ', 'NM', 'AK',
+        'HI')
+dat$side <- with(dat, ifelse(state %in% west, "west", "east" ))
+with(dat, table(dat$side, dat$race))
+race_side<-table(dat$side, dat$race)
+fisher.test(race_side, simulate.p.value=TRUE)
+with(dat, table(dat$body_camera, dat$race))
+race_camera<-table(dat$body_camera, dat$race)
+fisher.test(race_camera, simulate.p.value=TRUE)
+```
+
+
+``` {r}
+#Race and other factors
+dat_model<-with(dat, data.frame(race, gender, signs_of_mental_illness,
+                                body_camera, side))
+index <- createDataPartition(dat_model$race, p = .70, list = FALSE)
+train <- dat_model[index,]
+test <- dat_model[-index,]
+train <- within(train, race <- as.factor(race))
+train <- within(train, race <- relevel(race, ref = "W"))
+#Training
+multinom_model <- multinom(race ~ ., data = dat_model)
+summary(multinom_model)
+#exponent of the coefficients from our model to see these risk ratios.
+exp(coef(multinom_model))
+#predicted probabilities for each of our outcome levels
+head(round(fitted(multinom_model), 2))
+#Validating
+train$RacePredicted <- predict(multinom_model, newdata = train, "class")
+train <- within(train, RacePredicted <- as.factor(RacePredicted))
+train <- within(train, RacePredicted <- relevel(RacePredicted, ref = "W"))
+# Building classification table
+tab <- table(train$race, train$RacePredicted)
+# Calculating accuracy - sum of diagonal elements divided by total obs
+round((sum(diag(tab))/sum(tab))*100,2)
+#Predicting
+test$RacePredicted <- predict(multinom_model, newdata = test, "class")
+# Building classification table
+tab1 <- table(test$Race, test$RacePredicted)
+tab1
+```
+
+## Conclusion
+
+The time series analysis shows that there are not any any specific trend over time in the number of people of each race who are fatally shot by the police. 
+
+Using two-sample tests, we found that the data for each race cannot be considered iid and the distribution for each race is significantly different. We also found that there is a statistically significant difference between the group with mental illness and the group without mental illness. There is a statistically significant difference in the observed proportions of mental illness in the data and the actual proportion of mental illness in US adults. 
+
+By creating a statistical model based on census data and the probability of being fatally shot, we found that the percentage of African-Americans who are fatally shot is significantly higher than it would if all races were equally likely. We also found that the percentage of Caucasians and the percentage of Asians who are fatally shot is significantly lower than expected if all races were equally likely. For the Hispanic population and the Native American population, the percentage is almost consistent with the case where all races are equally likely to be fatally shot.
+
+We used the chi squared test and the fisher test to assess the independence of a few of the factors in the data set. We found that gender and mental illness, gender and race, race and mental illness, and race and age are all dependent. We also found that can cannot conclude that gender and age are independent and there is a not significant association between two characteristics. 
+
+Using a multinomial logistic regression, we attempted to predict the race of a person based on the gender, signs of mental illness, body camera presence, and side of the United Stated the shooting occurred. The model was inaccurate and performed poorly indicating that there are additional factors or the factors we selected were not as important as we had hypothesized. 
+
+
