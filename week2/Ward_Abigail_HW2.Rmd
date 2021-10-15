@@ -1,0 +1,222 @@
+---
+title: "Ward_Abigail_HW2"
+author: "Abigail Ward"
+date: "6/29/2021"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(tigerstats)
+```
+
+### Question 1
+random sample of 100,000 values from the Poisson distribution and a histogram of the results on a density scale
+ 
+```{r question1large, echo=FALSE, results = FALSE}
+set.seed(7654321)
+large <- rpois(100000, lambda = 4)
+dl<-density(large)
+largeplot<-hist(large, col='blue', freq=FALSE)
+largeplot
+
+
+```
+
+random sample of 100 values from the Poisson distribution and a histogram of the results on a density scale
+
+```{r question1small, echo=FALSE, results = FALSE}
+set.seed(7654321)
+small <- rpois(100, lambda = 4)
+ds<-density(small)
+smallplot<-hist(small, col='blue', freq=FALSE)
+smallplot
+
+```
+
+### Question 2
+
+visualization that compares the proportions each of the possible outcomes in the sample of size 100,000 to the theoretical probabilities of each of the outcomes for the Poisson distribution
+
+For which sample size are the proportions of each outcome more similar to the probabilities given by the density function of the Poisson distribution?
+
+```{r question2large, echo=FALSE}
+dflarge<-data.frame(large)
+dflarge<-summarize(group_by(dflarge,large),prop=n()/nrow(dflarge))
+
+
+prop<-dflarge["prop"]
+
+val<-c(0:max(large))
+theoL <- dpois(x=0:max(large), lambda=4)
+dftheo <- data.frame(value=val, theoL)
+
+
+difference<-theoL-prop
+dfdiff <- data.frame(value=val, difference=difference)
+
+
+plot(dfdiff, col='blue')
+abline(h=0)
+
+plotlarge<-ggplot(data=dflarge,aes(x=val))+geom_histogram(stat='identity',aes(y=prop))
+plotlargediff<-plotlarge+geom_point(data=dftheo, aes(x=val, y=theoL))
+plotlargediff
+```
+```{r question2small, echo=FALSE, warning=FALSE, message=FALSE}
+
+dfsmall<-data.frame(small)
+dfsmall<-summarize(group_by(dfsmall,small),prop=n()/nrow(dfsmall))
+
+
+prop<-dfsmall["prop"]
+
+val<-c(0:max(small))
+theoS <- dpois(x=0:max(small), lambda=4)
+dftheo <- data.frame(value=val, theoS)
+
+
+difference<-theoS-prop
+dfdiff <- data.frame(value=val, difference)
+
+
+plot(dfdiff, col='blue')
+abline(h=0)
+
+plotsmall<-ggplot(data=dfsmall,aes(x=val))+geom_histogram(stat='identity',aes(y=prop))
+plotsmalldiff<-plotsmall+geom_point(data=dftheo, aes(x=val, y=theoS))
+plotsmalldiff
+```
+
+
+The larger sample size resulted in proportions of each outcome more similar to the probabilities given by the density function of the Poisson distribution. 
+
+#### Question 3.a
+
+values of $x_{0.75}$ for the Normal distributions with mean 0 and sd in ${1,2,3,...10}$ and plot the points consisting of the value of the sd and the corresponding $x_{0.75}$. This should give an indication of a simple function relating sd and $x_{0.75}$.
+
+```{r question3a, echo=FALSE}
+
+quartileList<-qnorm(0.75,mean=0,sd=1:10)
+
+
+val<-c(1:10)
+dfquartile<-data.frame(sd=val, quartileList)
+
+plot(dfquartile, col='blue')
+```
+
+
+#### Question 3.b
+$z_{p}=\frac{w_{p}-\mu}{\sigma}$
+
+#### Question 3.c
+$w_{0.25}=z_{0.25}\sigma + \mu$  
+$w_{0.75}=z_{0.75}\sigma + \mu$  
+$w_{0.5}=\mu$  
+$w_{0.75}-w_{0.25}=2\sigma z_{0.75}$  
+
+#### Question 3.d
+$m = \mu$  
+$q = 2\sigma z_{0.75}$  
+$\sigma = \frac{q}{2z_{0.75}}$  
+
+### Question 4
+```{r question4, echo=FALSE, results = FALSE}
+dat.plot<-data.frame(x=c(0,5))
+ggplot(dat.plot,aes(x=x))+
+  stat_function(fun=dgamma,args=list(shape=1,scale=2))+
+  stat_function(fun=dgamma,args=list(shape=2,scale=.5),color="orange")+
+  stat_function(fun=dgamma,args=list(shape=8,scale=.125),color="blue")
+
+ns<-rep(c(2,5,20),times=c(3,3,3))
+shapes<-rep(c(1,2,8),times=3)
+scales<-rep(c(2,.5,.125),times=3)
+
+dat.params<-data.frame(ns,shapes,scales)
+val.mat<-matrix(rep(NA,100000*nrow(dat.params)),
+                ncol=nrow(dat.params))
+set.seed(123456)
+for(i in 1:nrow(dat.params)){
+  # Generate a matrix with 100,000 rows of n  
+  # random values from a gamma distribution where the value of n
+  # and of the shape and scale of the gamma distribution come from the 
+  # ith row of dat.params.
+  samp.mat<-matrix(rgamma(dat.params$ns[i]*100000,dat.params$shapes[i],
+                          dat.params$scales[i]),nrow=100000)
+  # take the mean of each row and store the result in val.mat
+  val.mat[,i]=apply(samp.mat,1,mean)
+}
+val.stats<-function(x){
+  return(c(median(x),quantile(x,.75)-quantile(x,.25)))
+}
+params<-apply(val.mat,2,val.stats)
+for(i in 1:ncol(val.mat)){
+  dat.temp<-data.frame(x=val.mat[,i])
+  g<-ggplot(dat.temp,aes(x=x))+
+    geom_histogram(aes(y=stat(density)),bins=50)+
+    labs(title=str_c("n=",dat.params$ns[i],", shape=",
+                     dat.params$shapes[i],
+                     ", scale=",round(dat.params$scales[i],2)))+
+    stat_function(fun=dnorm,args=list(mean=params[1,i],
+                          sd=params[2,i]/(2*qnorm(.75))))
+  print(g)
+}
+```
+
+An increase in the number of terms in the sample results in a histogram that more closely resembles the normal distribution. A decrease in the scale and an increase in the shape appears to have am positive impact in the degree of resemblance between the histogram and the normal distribution. 
+
+### Question 5
+```{r question5, echo=FALSE}
+
+ns<-rep(c(10,50,1000), times=c(3,3,3))
+ps<-rep(c(.5,.1,.01), times=3)
+
+dat.params<-data.frame(ns,ps)
+
+
+val.mat<-matrix(rep(NA,100000*nrow(dat.params)),
+                ncol=nrow(dat.params))
+set.seed(123456)
+for(i in 1:nrow(dat.params)){
+  # Generate a matrix with 100,000 rows of n  
+  samp.mat<-matrix(rbinom(100000,dat.params$ns[i],dat.params$ps[i]),nrow=100000)
+  # take the mean of each row and store the result in val.mat
+  val.mat[,i]=apply(samp.mat,1,mean)
+}
+val.stats<-function(x){
+  return(c(median(x),quantile(x,.75)-quantile(x,.25)))
+}
+
+params<-apply(val.mat,2,val.stats)
+
+for(i in 1:ncol(val.mat)){
+  if (params[2]!=0){
+  dat.temp<-data.frame(x=val.mat[,i])
+  g<-ggplot(dat.temp,aes(x=x))+
+    geom_histogram(aes(y=stat(density)),binwidth =1)+
+    labs(title=str_c("n=",dat.params$ns[i],", p=",
+                     dat.params$ps[i],2)) + stat_function(fun=dnorm,args=list(mean=params[1,i],
+                          sd=params[2,i]/(2*qnorm(.75)))) } else{
+ 
+  dat.temp<-data.frame(x=val.mat[,i])
+  g<-ggplot(dat.temp,aes(x=x))+
+    geom_histogram(aes(y=stat(density)),binwidth =1)+
+    labs(title=str_c("n=",dat.params$ns[i],", p=",
+                     dat.params$ps[i],2)) }
+  print(g)}
+binomial<-c()
+for(i in 1:nrow(dat.params)){
+  event<-qbinom(0.5, size=dat.params$ns[i], prob=dat.params$ps[i])
+  binomial[i] <- event}
+
+```
+
+#### Question 5.b
+The degree of resemblance increases with the increase in the number of terms n in the sample. Additionally, the closer p is to 0.5, the more closely the histogram resembles the normal distribution. 

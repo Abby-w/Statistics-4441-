@@ -1,0 +1,92 @@
+---
+title: "Ward_abigail_HW8"
+author: "Abigail Ward"
+date: "8/10/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(foreign)
+```
+
+## 1
+
+### 1.a
+
+
+Please compute the expected value of $\chi^2_1$, the $\chi^2$ distribution with 1 degree of freedom. 
+
+$$Var[\chi]=E[\chi^2]-(E[\chi])^2$$
+$$E(\chi_1 ^2)=E(Z^2)=Var[Z]+(E[Z])^2$$
+
+$Var[Z]=1$, $E[Z]=0$, so $(E[Z])^2=0$
+
+$$E(\chi_1 ^2)=1+0=1$$
+
+### 1.b
+Based on your answer to 1.a, please compute the expected value of $\chi^2_n$, the $\chi^2$ distribution with n degrees of freedom. 
+
+$$\chi_n ^2=\sum_{i=1}^nZ_i^2$$
+$$E(\chi_n ^2)=\sum_{i=1}^nE[Z_i^2]=\sum_{i=1}^n 1=n$$
+
+
+
+## 2
+
+### 2.a
+The Mann-Whitney U tests the nulll hypothesis that there is no difference in the incwage between the educ=7 group and the educ=10 group. The test showed that there was a significant difference (W = 467.5, p-value = 0.001395) in the income wage between the two education level groups. 
+
+Looking at the density plots, it is not reasonable to say that the red curve is the same shape as the turquoise, but shifted right. Therefore we reject that the two samples come from the same distribution and that the two samples come from distributions where one is a shift of the other.
+```{r}
+load("dat_7_10.RData")
+
+wilcox.test(incwage~educ, data=dat.7.10)
+wilcox.test(incwage~educ, data=dat.7.10, paired=TRUE)
+ggplot(dat.7.10,aes(x=incwage,color=factor(educ)))+geom_density()
+```
+
+
+### 2.b
+
+
+There is no difference in the results of the log test vs the original test because the Mann-Whitney U test is a rank test so the actual values of the data do not matter, only the rank each data point is labelled. Therefore, taking the log of each data point did not change the rank of each data point because the same operation was applied to every data point. 
+
+```{r}
+wilcox.test(log(incwage)~educ, data=dat.7.10)
+
+```
+
+## 3
+
+```{r}
+load("dat_sub.RData")
+t<-table(dat.sub$F_AGECAT,dat.sub$NATPROBS_b_W69)
+t<-t[1:4,1:4] # Drop the "Refused" row and column
+
+round(100*t/rowSums(t),0)
+```
+
+
+### 3.a
+
+Chi squared is not an appropriate test of the independence of this data because all of the "Not a problem at all" values are less than 5 which breaks the criteria needed to run a chi squared test accurately. 
+
+```{r}
+chisq.test(t)
+```
+
+### 3.b
+
+The fisher test is an appropriate test for the data because it works when the values are less than 5 and for categorical data. With a p-value of 0.03326, we reject the null hypothesis that the two categories are independent. 
+```{r}
+fisher.test(t)
+```
+
+
+

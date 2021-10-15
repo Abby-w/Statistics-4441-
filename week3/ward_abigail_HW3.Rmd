@@ -1,0 +1,198 @@
+---
+title: "Ward_Abigail_HW3"
+author: "Abigail Ward"
+date: "7/06/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+
+```
+
+### Question 1.a
+In the plots below, you can see that the maximum likelihood estimates of $\mu$ and $\sigma^2$ are consistent and approach $\mu=0$ and $\sigma^2=1$ as $n$ increases toward infinity.
+```{r question1a}
+set.seed(12345)
+N<-10000
+samp<-rnorm(N)
+theta.est<-function(n,s=samp){
+  m<-mean(s[1:n])
+  s2<-sum((s[1:n]-m)^2)/n
+  return(c(m,s2))
+}
+dat.consist<-t(sapply(1:N,theta.est))
+dat.consist<-data.frame(dat.consist)
+dat.consist$n<-1:N
+names(dat.consist)<-c("mu.hat","sigma.sq.hat","n")
+
+maxlikelihoodplot<-ggplot(dat.consist,aes(x=dat.consist$n)) + geom_point(data=dat.consist,aes(x=dat.consist$n, y=dat.consist$mu.hat))
+maxlikelihoodplot
+varianceplot<-ggplot(dat.consist,aes(x=dat.consist$n)) + geom_point(data=dat.consist,aes(x=dat.consist$n, y=dat.consist$sigma.sq.hat))
+varianceplot
+```
+
+### Question 1.b
+The maximum likelihood estimate of $\mu$ does seem to be unbiased since the average of 10000 small samples is still very close to $0$. The maximum likelihood estimate of $\sigma$ seems to be biased since the expected value was $1$, but the calculated value was $0.805$. This bias was corrected by dividing the sum of the squared differences by 4 instead of 5. 
+
+```{r question1b}
+set.seed(45678)
+mat<-matrix(rnorm(10000*5),ncol=5)
+means<-c()
+sd<-c()
+newSD<-c()
+for (x in 1:10000){
+  m<-mean(mat[x,])
+  means[x] <-m
+  s<-sum((mat[x,]-m)^2)/5
+  sd[x]<-s
+  s2<-sum((mat[x,]-m)^2)/4
+  newSD[x]<-s2
+}
+
+avgMean<-mean(means)
+avgSD<-mean(sd)
+avgNewSD<-mean(newSD)
+avgMean
+avgSD
+avgNewSD
+
+```
+## Question 2
+
+$f(\lambda)=\prod _{i=1}^n\lambda\exp(-\lambda x_i)$
+
+$\ln f(\lambda)=\ln (\prod _{i=1}^n\lambda\exp(-\lambda x_i))$
+
+$\ln f(\lambda)=\sum _{i=1}^n\ln (\lambda\exp(-\lambda x_i))$
+
+$\ln f(\lambda)=\sum _{i=1}^n\ [ln \lambda + \ln(\exp(-\lambda x_i))]$
+
+$\ln f(\lambda)=\sum _{i=1}^n\ \ln \lambda - \sum _{i=1}^n\ \lambda x_i$
+
+$g(\lambda)=\ln f(\lambda)=n\lambda - \lambda \sum _{i=1}^n\ x_i$
+
+$\frac{dg}{d\lambda} = n\frac{1}{\lambda} - \sum _{i=1}^n\ x_i =  0$
+
+$\frac{1}{\lambda} = \frac{1}{n}\sum _{i=1}^n\ x_i = \bar x$
+
+$\lambda= \frac{1}{\bar x}$
+
+## Question 3.a
+The maximum likelihood estimate of both $\mu$ and $\sigma^2$ are equal to the given $\lambda$
+
+```{r question3a}
+lambdas<-c(4,25,100)
+set.seed(345678)
+mat.sim<-matrix(rep(NA,100000*3),ncol=3)
+for(i in 1:3){
+  mat.sim[,i]<-rpois(100000,lambdas[i])
+}
+apply(mat.sim,2,mean)
+apply(mat.sim,2,var)
+
+```
+
+## Question 3.b
+The proposed Normal approximation to the $Poisson(\lambda)$ improves as $\lambda$ increases as shown in the histograms better matching the normal distribution dots as well as the smaller sum of the absolute differences of the two probabilities. 
+
+```{r question3}
+lambdas<-c(4,25,100)
+lim.max<-c(qpois(.99995,4), qpois(.99995,25), qpois(.99995,100))
+
+for(i in 1:length(lambdas)){
+  x<-0:lim.max[i]
+  lower<-pnorm(x-.5,mean=lambdas[i],sd=sqrt(lambdas[i]))
+  upper<-pnorm(x+.5,mean=lambdas[i],sd=sqrt(lambdas[i]))
+  p.norm<-upper-lower
+  instance<-data.frame(x=0:lim.max[i],
+                d=dpois(0:lim.max[i],lambda=lambdas[i]),
+                d.approx=p.norm)
+  g<-ggplot(data=instance,aes(x=x))+geom_col(aes(y=d),color="blue",fill="blue")+
+    geom_point(aes(y=d.approx))
+  print(g)
+}
+
+for(i in 1:length(lambdas)){
+  x<-0:lim.max[i]
+  lower<-pnorm(x-.5,mean=lambdas[i],sd=sqrt(lambdas[i]))
+  upper<-pnorm(x+.5,mean=lambdas[i],sd=sqrt(lambdas[i]))
+  p.pois<-dpois(x,lambda=lambdas[i])
+  p.norm<-upper-lower
+  approx.error<-sum(abs(p.pois-p.norm))
+  print(approx.error)
+}
+
+```
+## Question 4
+
+
+
+```{r question4a}
+dat.pop<-read.csv("population.csv",stringsAsFactors = FALSE)
+dat.den<-
+  read.csv("population-density.csv",stringsAsFactors = FALSE)
+names(dat.den)[4]<-"density"
+
+#4a answer
+dat.pop<-filter(dat.pop,Year==2000,!Code %in% c("","OWID_WRL"))
+dat.den<-filter(dat.den,Year==2000,!Code %in% c("","OWID_WRL"))
+
+
+dat.both<-inner_join(dat.den,dat.pop,by="Code")
+mean(dat.both$Entity.x==dat.both$Entity.y)
+#this is equal to 1
+```
+```{r question4b}
+inds<-c(
+  which(dat.both$density %in%
+              c(max(dat.both$density),min(dat.both$density))),
+  which(dat.both$Population %in%
+            c(max(dat.both$Population),min(dat.both$Population)))
+)
+
+```
+
+```{r question4c}
+dat.both<-transmute(dat.both,den.log=log(density),
+               pop.log=log(Population),entity=Entity.x)
+
+
+dat.text<-dat.both[inds,]
+```
+
+```{r question4d}
+g<-ggplot(dat.both,aes(x=pop.log,y=den.log))+geom_point()
+g
+
+g<-g+
+  geom_text(data=dat.text,aes(x=pop.log,y=den.log,label=entity))
+g
+
+```
+
+
+
+```{r question4e}
+lin.model<-lm(den.log~pop.log, data=dat.both)
+
+coef<-lm(den.log~pop.log,data=dat.both)$coefficients
+coef
+
+coefRev<-lm(pop.log~den.log,data=dat.both)$coefficients
+slopeRev<-1/coefRev[2]
+interceptRev<- (-coefRev[1])/coefRev[2]
+
+g<-g+
+  geom_abline(slope=coef[2],intercept=coef[1],color="red") +
+  geom_abline(slope=slopeRev,intercept=interceptRev,
+              color="blue")
+g
+
+```

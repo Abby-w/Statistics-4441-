@@ -1,0 +1,245 @@
+---
+title: "Ward_Abigail_HW4"
+author: "Abigail Ward"
+date: "7/13/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+options(dplyr.summarise.inform = FALSE)
+library(ggplot2)
+library(knitr)
+```
+
+
+```{r}
+dat<-read.csv("usa_00021.csv")
+dat_trim <- select(dat, YEAR:INCTOT)
+write.csv(dat, file = "usa_00016_trim.csv")
+```
+
+```{r}
+denver<-filter(dat,PUMA>=812 & PUMA<=816, INCTOT>0,AGE>=25)
+g<-ggplot(denver,aes(x=EDUC,y=INCTOT))+geom_jitter(alpha=.05)
+g
+g<-g+coord_cartesian(ylim =c(0,1.5e5))
+g
+```
+### Question 1.a 
+according to the linear model an increase of 1 in the “EDUC” category is associated with a change in INCTOT by 10706.25 
+```{r}
+fit <- lm(INCTOT ~ EDUC, data=denver)
+fit$coefficients[2]
+g<-g+
+  geom_abline(slope=fit$coefficients[2],intercept=fit$coefficients[1],color="orange")
+g
+g <- g+ coord_cartesian(ylim=c(0,1.5e5))
+g
+
+summary(lm(INCTOT ~ EDUC, data=denver))$r.squared 
+```
+
+
+
+
+### Question 1.b 
+
+```{r}
+den.mean <-denver%>%group_by(EDUC)%>%
+  summarize(income.mean=mean(INCTOT), income.med=median(INCTOT))
+g<-g+
+  geom_point(data=den.mean, aes(x=EDUC, y=income.mean), color ="orange")+
+  geom_point(data=den.mean, aes(x=EDUC, y=income.med), color="blue")
+g
+
+```
+
+
+### Question 1.c
+
+```{r}
+abs.error <-function(coeffs, x,y){
+  sum(abs(y-(coeffs[2]*x+coeffs[1])))
+}
+min.absError<-nlm(abs.error,p=fit$coefficients, x=denver$EDUC, y=denver$INCTOT)
+g<-g+
+  geom_abline(slope=min.absError$estimate[2],
+              intercept=min.absError$estimate[1], color="blue")
+g
+min.absError$estimate[2]
+
+```
+
+
+### Question 1.d
+Lower range of "EDUC"
+```{r}
+den.low<-filter(dat, PUMA>=812 & PUMA<=816, INCTOT>0, AGE>=25,
+                EDUC<=5)
+g<-ggplot(den.low,aes(x=EDUC,y=INCTOT))+geom_jitter(alpha=.05)
+g<-g+coord_cartesian(ylim =c(0,1.5e5))
+
+fit.low <- lm(INCTOT ~ EDUC, data=den.low)
+g<-g+
+  geom_abline(slope=fit.low$coefficients[2],intercept=fit.low$coefficients[1],color="orange")
+
+
+denLow.mean <-den.low%>%group_by(EDUC)%>%
+  summarize(income.mean=mean(INCTOT), income.med=median(INCTOT))
+g<-g+
+  geom_point(data=denLow.mean, aes(x=EDUC, y=income.mean), color ="orange")+
+  geom_point(data=denLow.mean, aes(x=EDUC, y=income.med), color="blue")
+
+min.absError<-nlm(abs.error,p=fit.low$coefficients, x=den.low$EDUC, y=den.low$INCTOT)
+g<-g+
+  geom_abline(slope=min.absError$estimate[2],
+              intercept=min.absError$estimate[1], color="blue")
+g
+fit.low$coefficients[2]
+```
+
+upper range of "EDUC"
+
+```{r}
+den.high<-filter(dat, PUMA>=812 & PUMA<=816, INCTOT>0, AGE>=25,
+                EDUC>=5)
+g<-ggplot(den.high,aes(x=EDUC,y=INCTOT))+geom_jitter(alpha=.05)
+g<-g+coord_cartesian(ylim =c(0,1.5e5))
+
+fit.high <- lm(INCTOT ~ EDUC, data=den.high)
+g<-g+
+  geom_abline(slope=fit.high$coefficients[2],intercept=fit.high$coefficients[1],color="orange")
+
+
+denHigh.mean <-den.high%>%group_by(EDUC)%>%
+  summarize(income.mean=mean(INCTOT), income.med=median(INCTOT))
+g<-g+
+  geom_point(data=denHigh.mean, aes(x=EDUC, y=income.mean), color ="orange")+
+  geom_point(data=denHigh.mean, aes(x=EDUC, y=income.med), color="blue")
+
+min.absError<-nlm(abs.error,p=fit.high$coefficients, x=den.high$EDUC, y=den.high$INCTOT)
+g<-g+
+  geom_abline(slope=min.absError$estimate[2],
+              intercept=min.absError$estimate[1], color="blue")
+g
+fit.high$coefficients[2]
+```
+
+### Question 1.e
+```{r}
+denver%>%group_by(EDUC)%>%summarize(stdev=sd(INCTOT))
+```
+
+The "best fit line" had a R^2 value of 0.08450515 which would indicate that it is not a very good fit for the data. There is a large spread of INCTOT values for each EDUC level that makes any model a poor fit. 
+The nlm line seems to fit the data better than the best fit line because the slope is not influenced by the occasional high INCTOT values at EDUC levels between 6 and 9.
+The lower range of EDUC model seems to be a good model as the data shows there is not much change in the INCTOT at EDUC less than 5. With that in mind, it since neither the best fit nor models flatten out at the lower end of the EDUC, they do not accurately predict INCTOT values for EDUC less than 5. 
+For the best fit, nlm and upper range model, the prediction shows negative predictions at the lower range which is not an appropriate summary of the data since INCTOT cannot be negative. 
+
+I would use the nlm model to predict the INCTOT, with the understanding that it is still flawed and the spread of the actual data is very large. 
+
+mean slope: 10706.25
+median slope: 6999.89
+low slope: 244.2279
+high slope: 13097.88 
+ 
+
+As, noted before, the mean is pulled in the direction of any outliers so the high INCTOT values for EDUC between 6 and 9 and large spread of the INCTOT for EDUC greater than 9 increase the center value for the mean and therefore increase the slope of the model. The median is not influenced by outliers and therefore ofter results in a lower center value in this case and a smaller slope. 
+
+For every EDUC level, the standard deviation of INCTOT is larger than the size of the estimated change in "INCTOT" associated with a change in "EDUC". The relates to what was mentioned previously about the issues with these models and accurately predicting an observation because the spread of the INCTOT at each EDU level is so large. The change in INCTOT could be hidden within the spread of the INCTOT data. 
+
+
+
+## Question 2
+
+$$P(k,\lambda ) = \frac{\lambda ^k}{k!}\exp (-\lambda)$$
+$$E(X) = \sum_{k=0}^{\infty} kp(k, \lambda)$$
+$$E(X) = \sum_{k=0}^{\infty} k\frac{\lambda ^k}{k!}\exp (-\lambda)$$
+$$E(X) = \exp (-\lambda)\sum_{k=1}^{\infty} k\frac{\lambda ^k}{k!}$$
+$$E(X) = \lambda\exp (-\lambda) \sum_{k=1}^{\infty} \frac{\lambda ^{k-1}}{(k-1)!}$$
+$$E(X) = \lambda\exp (-\lambda) \sum_{k=0}^{\infty} \frac{\lambda ^k}{k!}$$
+$$E(X) = \lambda\exp (-\lambda) \exp (\lambda)$$
+$$E(X) = \lambda$$
+#variance
+$$E(X^2)- [E(X)]^2=[ \sum_{k=0}^{\infty} k^2p(k, \lambda)] - \lambda^2  $$
+$$E(X^2) = \sum_{k=0}^{\infty} k^2\frac{\lambda ^k}{k!}\exp (-\lambda)$$
+$$E(X^2) = \sum_{k=0}^{\infty} (k(k-1) +k)\frac{\lambda ^k}{k!}\exp (-\lambda)$$
+$$E(X^2) = \sum_{k=0}^{\infty} k(k-1)\frac{\lambda ^k}{k!}\exp (-\lambda)+ \sum_{k=0}^{\infty} k\frac{\lambda ^k}{k!}\exp (-\lambda)$$
+$$E(X^2) = \exp (-\lambda)\lambda^{2}\sum_{k=2}^{\infty}\frac{k(k-1)\lambda^{k-2}}{k!}+\exp (-\lambda)\lambda\sum_{k=0}^{\infty}\frac{\lambda^{k}}{k!}$$
+$$E(X^2)=\exp (-\lambda)\lambda^{2}\sum_{k=0}^{\infty}\frac{\lambda^{k}}{k!}+\exp (-\lambda)\lambda\sum_{k=0}^{\infty}\frac{\lambda^{k}}{k!}$$
+
+$$E(X^2)=\lambda^{2}\exp (-\lambda)\exp (\lambda)+\lambda\exp (-\lambda)\exp (\lambda)$$
+$$E(X^2)- [E(X)]^2=\lambda^{2}+\lambda - \lambda^2  $$
+$$E(X^2)- [E(X)]^2=\lambda  $$
+
+### Question 3
+
+
+```{r}
+nset<-c(2,5,20)
+pset<-c(0.5,0.2,0.1)
+
+dat.samp<-
+  data.frame(nset=rep(nset,times=rep(length(pset),length(nset))),
+             pset=rep(pset,times=length(nset)))
+#dat.samp<-mutate(dat.samp,mn=ns*ps,stdev=sqrt(ns*ps*(1-ps)))
+plot.make<-function(param){
+  n<-param[1]
+  p<-param[2]
+  k.lower<-qbinom(.01,n,p)
+  k.upper<-qbinom(.99,n,p)
+  k<-k.lower:k.upper
+  dat.this<-data.frame(k=k,den=dbinom(k,n,p))
+  g.this<-ggplot(data=dat.this,aes(x=k,y=den))+geom_col()+
+    stat_function(fun=dnorm,args=list(mean=n*p,sd=sqrt(n*p*(1-p))))
+  g.this<-g.this+labs(title=str_c("n=",n,", p=",p))
+}
+
+plots<-apply(dat.samp,1,plot.make)
+plots
+
+```
+
+### Question 4.a 
+
+
+```{r}
+# p-value calculator
+
+p.get<-function(obs,size,pr){
+  p.low<-2*pbinom(obs,size,pr)
+  p.high<-2*pbinom(obs-1,size,pr,lower.tail = FALSE)
+
+  return(min(p.low,p.high))
+}
+
+p.get(c(25),100,.3)
+p.get(c(30),100,.3)
+
+```
+
+### Question 4.b
+The function returns the number of p-values less than or equal to “p”, and then the average of 1000 replicates was calculated. Since both of the 200 research teams resulted in a value of 1, the center of the p values for test of the null hypothesis that the sample comes from a binomial distribution with size equal “size” and probability of success equal to “pr” were less than the p value meaning the researchers are very likely to reject the null hypothesis.  
+
+For the research teams of 400, the mean is less than 1 meaning there were more occurrences in the replicates where the p value calculated was greater than the p value given.This makes sense because the p value given is smaller for this group. The conclusion for this size research team would likely still be to reject the null hypothesis. 
+
+It does not seem like a larger sample size protects the research team from a type 1 error. Although the mean decreases to 0.99 for the larger sample size for the 200 group,  we did not see a smaller mean value for the 1000 size sample compared to the 500 size sample for the 400 group. Having a smaller given p value would be a better protector against a type 1 error than an increase in the sample size. 
+
+```{r}
+
+sim<-function(n,size,pr,p){
+    samp<-rbinom(n,size,pr)
+    return(sum(p.get(samp,size,pr)<p))
+}
+
+set.seed(1234)
+mean(replicate(1000,sim(200,100,.3,.05)))
+mean(replicate(1000,sim(200,500,.3,.05)))
+
+mean(replicate(1000,sim(400,500,.3,.01)))
+mean(replicate(1000,sim(400,1000,.3,.01)))
+```

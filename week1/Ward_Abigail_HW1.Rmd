@@ -1,0 +1,124 @@
+---
+title: "Abigail Ward_ HW1"
+author: "Abigail Ward"
+date: "6/23/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+``````{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(HistData)
+dat<-PolioTrials
+```
+### Part 1
+
+### Question 1
+
+Proportion of paralytic polio cases in the "Placebo" group and separately in the "NotInoculated" group in the "RandomizedControl" trial.
+
+
+```{r question1}
+para_placebo<-dat$Paralytic[2]/dat$Population[2]
+notInoc_RandomControl<-dat$Paralytic[3]/dat$Population[3] 
+para_placebo
+notInoc_RandomControl
+```
+
+### Question 2
+
+Calculation of the probability of a draw that is greater than or equal to the observed value without simulation.
+
+```{r question2}
+prob_sucess<-(dat$Paralytic[2]+dat$Paralytic[3])/(dat$Population[2]+dat$Population[3]) 
+trials<-dat$Population[2]
+1-pbinom(dat$Paralytic[2]-1, trials, prob_sucess)
+```
+
+### Part 2
+```{r part2, echo=FALSE}
+dat.2<-t(dat[1:2,4:6])
+dat.2<-data.frame(dat.2)
+names(dat.2)<-c("Vaccinated","Placebo")
+```
+
+### Question 3
+
+Proportions in each category for the RandomizedControl Vaccinated and the RandomizedControl Placebo groups. 
+
+```{r question3}
+vac_paralytic<-dat.2$Vaccinated[1]/(sum(dat.2$Vaccinated))
+vac_NotParalytic<-dat.2$Vaccinated[2]/(sum(dat.2$Vaccinated))
+vac_False<-dat.2$Vaccinated[3]/(sum(dat.2$Vaccinated))
+
+placebo_Paralytic<-dat.2$Placebo[1]/(sum(dat.2$Placebo))
+placebo_NotParalytic<-dat.2$Placebo[2]/(sum(dat.2$Placebo))
+placebo_False<-dat.2$Placebo[3]/(sum(dat.2$Placebo))
+
+vac_paralytic
+vac_NotParalytic
+vac_False
+
+placebo_Paralytic
+placebo_NotParalytic
+placebo_False
+```
+
+### Question 4
+
+Probability model for a simulation-based hypothesis test that addresses whether the two groups can reasonably be considered to come from populations with the same proportions of Paralytic, Non-Paralytic, and  False Report. 
+```{r question4}
+#calculate the proportion of each result for both Vaccinated and placebo groups
+outcome.prop<-(dat.2$Vaccinated+dat.2$Placebo)/sum(dat.2$Vaccinated+dat.2$Placebo)
+outcome.prop
+
+#calculate the actual result
+prop.vacc<-dat.2$Vaccinated/sum(dat.2$Vaccinated)
+prop.vacc
+prop.plac<-dat.2$Placebo/sum(dat.2$Placebo)
+prop.plac
+test.stat<-sqrt(sum((prop.vacc-prop.plac)^2))
+test.stat
+
+#simulation
+n<-10000
+
+k1<-sum(dat.2$Vaccinated)
+k1
+k2<-sum(dat.2$Placebo)
+k2
+
+sim= rep(NA, n)
+for(i in 1:n){
+  samp1<-sample(c("Paralytic", "NonParalytic","FalseReports"), k1, replace=TRUE, prob = outcome.prop)
+  samp2<-sample(c("Paralytic", "NonParalytic","FalseReports"), k2, replace=TRUE, prob = outcome.prop)
+  counts1<-table(samp1)
+  counts2<-table(samp2)
+  props1<-counts1/sum(counts1)
+  props2<-counts2/sum(counts2)
+  dist.eu<-sqrt(sum((props1-props2)^2))
+  
+  sim[i]<-dist.eu
+}
+dat.temp<-data.frame(sim=sim)
+ggplot(data =dat.temp, aes(x=sim))+geom_histogram()+geom_vline(xintercept=test.stat, color="blue")
+mean(sim>=test.stat)
+```
+
+
+
+The distance between the proportion of Paralytic, Non-Paralytic and False Reports between the vaccinated and placebo groups is the test statistic. It is calculated by finding the euclidean distance between the vaccinated sample population and placebo sample population. 
+
+
+The probability model is the outcome.prop which describes the probability of each group (Paralytic, Non-Paralytic and False Reports) occurring in the population which determined using the observed values. 
+
+The probability model can be simulated by selecting an sample set of the three options (Paralytic, Non-Paralytic and False Reports) the same size and the placebo and the separately of the vaccinated groups based on the outcome.prop.
+
+The comparison which best addresses the null hypothesis is done by calculating the number of times the simulation resulted in a test statistic equal to or greater than the observed statistic. 
+
+
